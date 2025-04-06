@@ -2,13 +2,13 @@ dev_dir: ${oc.env:DEV_PATH}
 
 hydra:
   run:
-    dir: ${dev_dir}/im2flow2act/experiment/flow_generation/animateFlow/${now:%Y-%m-%d_%H-%M-%S}
+    dir: ${dev_dir}/im2flow2act/experiment/3D_flow_generation/coffee/${now:%Y-%m-%d_%H-%M-%S}
 
-project_name: AnimateFlow
+project_name: 3D_flow_generation
 debug: False
 
 training:
-  num_train_epochs: 5000
+  num_train_epochs: 3000
   max_train_steps: null
   gradient_accumulation_steps: 1
   gradient_checkpointing: False
@@ -17,23 +17,24 @@ training:
   mixed_precision: "fp16"
   enable_xformers_memory_efficient_attention: True
   # dataloader 
-  batch_size: 4
-  num_workers: 4
+  batch_size: 20
+  num_workers: 8
   shuffle: True
   pin_memory: True
   persistent_workers: True
   drop_last: False
   # ckpt
-  ckpt_frequency: 50
+  ckpt_frequency: 100
   # load_pretrain_weight
   load_pretrain_weight: True
 
-animateflow_kwargs:
+animateflow_3d_kwargs:
   clip_model: "openai/clip-vit-large-patch14"
   global_image_size: [224,224]
   freeze_visual_encoder: True
   global_condition_type: "all"
   emb_dim: 768
+  flow_shape: [50, 30]
 
 load_pretrain_motion_module: False
 lora:
@@ -81,18 +82,11 @@ optimizer:
   adam_epsilon: 1e-08
 
 dataset:
-  _target_: im2flow2act.flow_generation.dataloader.animateflow_dataset.AnimateFlowDataset
-  data_pathes: [
-    "${dev_dir}/im2flow2act/data/simulation_sphere_demonstration/pickNplace",
-    "${dev_dir}/im2flow2act/data/simulation_sphere_demonstration/pouring",
-    "${dev_dir}/im2flow2act/data/simulation_sphere_demonstration/drawer_open",
-    ]
-  grid_size: 32
-  frame_sampling_method: "uniform"
-  frame_resize_shape: [224,224]
-  point_tracking_img_size: [256,256]
+  _target_: im2flow2act.flow_generation.dataloader.animateflow_mimicgen_3d_dataset.AnimateFlowMimicgen3DDataset
+  data_path: "/data/yuanhong/mimicgen_data/core_datasets/coffee/demo_src_coffee_task_D1/demo_3d.hdf5"
   diff_flow: False
-  n_sample_frames: 32
+  num_points: 30
+  flow_resize_length: 50
   # max_episode: null
   # max_episode: [4,4,4,4,4]
 
@@ -106,35 +100,35 @@ evaluation:
   viz_n_points: 512
   draw_line: False
 
-  datasets: 
-    - _target_: im2flow2act.flow_generation.dataloader.animateflow_dataset.AnimateFlowDataset
-      data_pathes: ["${dev_dir}/im2flow2act/data/simulation_sphere_demonstration/pickNplace"]
-      grid_size: 32
-      n_sample_frames: ${dataset.n_sample_frames}
-      frame_sampling_method: "uniform"
-      frame_resize_shape: [224,224]
-      point_tracking_img_size: [256,256]
-      diff_flow: False
-      max_episode: ${evaluation.num_samples}
-      start_episode: 0
-    - _target_: im2flow2act.flow_generation.dataloader.animateflow_dataset.AnimateFlowDataset
-      data_pathes: ["${dev_dir}/im2flow2act/data/simulation_sphere_demonstration/pouring"]
-      grid_size: 32
-      n_sample_frames: ${dataset.n_sample_frames}
-      frame_sampling_method: "uniform"
-      frame_resize_shape: [224,224]
-      point_tracking_img_size: [256,256]
-      diff_flow: False
-      max_episode: ${evaluation.num_samples}
-      start_episode: 0
-    - _target_: im2flow2act.flow_generation.dataloader.animateflow_dataset.AnimateFlowDataset
-      data_pathes: ["${dev_dir}/im2flow2act/data/simulation_sphere_demonstration/drawer_open"]
-      grid_size: 32
-      n_sample_frames: ${dataset.n_sample_frames}
-      frame_sampling_method: "uniform"
-      frame_resize_shape: [224,224]
-      point_tracking_img_size: [256,256]
-      diff_flow: False
-      max_episode: ${evaluation.num_samples}
-      start_episode: 0
+  # datasets: 
+  #   - _target_: im2flow2act.flow_generation.dataloader.animateflow_dataset.AnimateFlowDataset
+  #     data_pathes: ["${dev_dir}/im2flow2act/data/simulation_sphere_demonstration/pickNplace"]
+  #     grid_size: 32
+  #     n_sample_frames: ${dataset.n_sample_frames}
+  #     frame_sampling_method: "uniform"
+  #     frame_resize_shape: [224,224]
+  #     point_tracking_img_size: [256,256]
+  #     diff_flow: False
+  #     max_episode: ${evaluation.num_samples}
+  #     start_episode: 0
+  #   - _target_: im2flow2act.flow_generation.dataloader.animateflow_dataset.AnimateFlowDataset
+  #     data_pathes: ["${dev_dir}/im2flow2act/data/simulation_sphere_demonstration/pouring"]
+  #     grid_size: 32
+  #     n_sample_frames: ${dataset.n_sample_frames}
+  #     frame_sampling_method: "uniform"
+  #     frame_resize_shape: [224,224]
+  #     point_tracking_img_size: [256,256]
+  #     diff_flow: False
+  #     max_episode: ${evaluation.num_samples}
+  #     start_episode: 0
+  #   - _target_: im2flow2act.flow_generation.dataloader.animateflow_dataset.AnimateFlowDataset
+  #     data_pathes: ["${dev_dir}/im2flow2act/data/simulation_sphere_demonstration/drawer_open"]
+  #     grid_size: 32
+  #     n_sample_frames: ${dataset.n_sample_frames}
+  #     frame_sampling_method: "uniform"
+  #     frame_resize_shape: [224,224]
+  #     point_tracking_img_size: [256,256]
+  #     diff_flow: False
+  #     max_episode: ${evaluation.num_samples}
+  #     start_episode: 0
    

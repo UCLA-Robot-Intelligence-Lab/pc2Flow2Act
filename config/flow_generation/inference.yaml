@@ -3,7 +3,7 @@ hydra:
   run:
     dir: ${dev_dir}/im2flow2act/experiment/flow_generation/inference/${now:%Y-%m-%d_%H-%M-%S}
 
-model_path: ${dev_dir}/im2flow2act/checkpoints/flow_generation
+model_path: ${dev_dir}/checkpoints/flow_generation
 model_ckpt: 1800
 
 num_samples: 20
@@ -18,4 +18,5 @@ video_length: 32
 diff_flow: False
 
 dataset_path: ${dev_dir}/im2flow2act/data/simulation_evaluation/drawer_open
-evaluation_save_path: ${dataset_path}
+evaluation_save_path: ${dev_dir}/im2flow2act/data/drawer_open_flow_eval
+device: cuda:0

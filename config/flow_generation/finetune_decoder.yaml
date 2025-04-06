@@ -43,7 +43,7 @@ dataset:
     "${dev_dir}/im2flow2act/data/simulation_sphere_demonstration/pickNplace",
     "${dev_dir}/im2flow2act/data/simulation_sphere_demonstration/pouring",
     "${dev_dir}/im2flow2act/data/simulation_sphere_demonstration/drawer_open",
-    ]
+  ]
   grid_size: 32
   frame_resize_shape: [224,224]
   point_tracking_img_size: [256,256]
@@ -59,9 +59,9 @@ evaluation:
   evalulation_dataset:
     _target_: im2flow2act.flow_generation.dataloader.animateflow_dataset.AnimateFlowDataset
     data_pathes: [
-    "${dev_dir}/im2flow2act/data/simulation_sphere_demonstration/pickNplace",
-    "${dev_dir}/im2flow2act/data/simulation_sphere_demonstration/pouring",
-    "${dev_dir}/im2flow2act/data/simulation_sphere_demonstration/drawer_open",
+      "${dev_dir}/im2flow2act/data/simulation_sphere_demonstration/pickNplace",
+      "${dev_dir}/im2flow2act/data/simulation_sphere_demonstration/pouring",
+      "${dev_dir}/im2flow2act/data/simulation_sphere_demonstration/drawer_open",
     ]
     n_sample_frames: 32
     grid_size: 32

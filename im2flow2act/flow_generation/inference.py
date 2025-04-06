@@ -22,14 +22,14 @@ def load_model(cfg):
     print(f"loading vae from {model_cfg.vae_pretrained_model_path}")
     vae = AutoencoderKL.from_pretrained(
         model_cfg.vae_pretrained_model_path, subfolder="vae"
-    ).to("cuda")
+    ).to(cfg.device)
     print(f"loading tokenizer and text_encoder from {model_cfg.pretrained_model_path}")
     tokenizer = CLIPTokenizer.from_pretrained(
         model_cfg.pretrained_model_path, subfolder="tokenizer"
     )
     text_encoder = CLIPTextModel.from_pretrained(
         model_cfg.pretrained_model_path, subfolder="text_encoder"
-    ).to("cuda")
+    ).to(cfg.device)
     print(f"loading unet from {model_cfg.pretrained_model_path}")
     unet = UNet3DConditionModel.from_pretrained_2d(
         model_cfg.pretrained_model_path,
@@ -46,7 +46,7 @@ def load_model(cfg):
             f"epoch_{cfg.model_ckpt}.ckpt",
         )
     )
-    model = model.to("cuda")
+    model = model.to(cfg.device)
     model.eval()
     return vae, text_encoder, tokenizer, noise_scheduler, model
 

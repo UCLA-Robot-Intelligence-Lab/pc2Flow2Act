@@ -6,10 +6,17 @@ import numpy as np
 import zarr
 from einops import repeat
 
-from im2flow2act.flow_generation.AnimationFlowPipeline import AnimationFlowPipeline
+try:
+    from im2flow2act.flow_generation.AnimationFlowPipeline import AnimationFlowPipeline
+except ModuleNotFoundError:
+    import sys
+    sys.path.insert(0, os.path.abspath('/home/yuanhong/Documents/im2Flow2Act'))
+    from im2flow2act.flow_generation.AnimationFlowPipeline import AnimationFlowPipeline
+
 from im2flow2act.flow_generation.inference import (
     inference,
     load_model,
+    load_config
 )
 from im2flow2act.tapnet.utility.utility import (
     create_uniform_grid_from_bbox,
