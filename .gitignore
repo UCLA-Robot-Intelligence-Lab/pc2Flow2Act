@@ -160,14 +160,20 @@ cython_debug/
 #.idea/
 
 # *.png
-*.ipynb
+# *.ipynb
 *.mp4
 *.gif
 wandb/
 experiment/
 dataset/
 log/
-notebook/
+# notebook/
 .hydra/
 pretrain_weights/
 checkpoints/
+*.ckpt
+
+im2flow2act/checkpoints/
+im2flow2act/data/
+checkpoints/
+im2flow2act/experiment/
