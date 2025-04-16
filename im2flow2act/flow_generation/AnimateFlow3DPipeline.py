@@ -14,9 +14,10 @@ from diffusers.schedulers import (
     LMSDiscreteScheduler,
     PNDMScheduler,
 )
+from einops import rearrange
 from im2flow2act.flow_generation import AnimateFlow3D
 from diffusers.utils import BaseOutput, logging
-from tqdm import tqdm
+from im2flow2act.flow_generation.dataloader.animateflow_mimicgen_3d_dataset import AnimateFlowMimicgen3DDataset
 
 logger = logging.get_logger(__name__)  # pylint: disable=invalid-name
 
@@ -42,10 +43,12 @@ class AnimationFlow3DPipeline:
             EulerAncestralDiscreteScheduler,
             DPMSolverMultistepScheduler,
         ],
+        dataset=None  # used for inverse normalization
     ):
         self.model = model
         self.device = device
         self.scheduler = scheduler
+        self.dataset = dataset
 
     def prepare_extra_step_kwargs(self, generator, eta):
         # prepare extra kwargs for the scheduler step, since not all schedulers have the same signature
@@ -185,7 +188,6 @@ class AnimationFlow3DPipeline:
                 global_obs,
                 first_frame_object_points,
             ).to(dtype=latents_dtype)
-
 
             # compute the previous noisy sample x_t -> x_t-1
             latents = self.scheduler.step(

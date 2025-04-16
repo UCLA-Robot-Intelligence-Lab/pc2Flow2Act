@@ -29,18 +29,20 @@ class AnimateFlow3D(nn.Module):
     def __init__(
         self,
         unet,
-        # clip_model,
-        # global_image_size,
-        # freeze_visual_encoder=True,
-        # global_condition_type="cls_token",
+        uni3d,
         in_channels=6, # (x, y, z, R, G, B)
         flow_shape=(200, 30), # (T, num_points)
     ) -> None:
         super().__init__()
-        self.scene_encoder = PointNetEncoder(in_channels=in_channels)
+        self.scene_encoder = uni3d
         self.obj_encoder = MLPEncoder(in_channels=in_channels)
         self.unet = unet
         self.flow_shape = flow_shape
+
+        for param in self.scene_encoder.parameters():
+            param.requires_grad = False
+        
+        self.scene_encoder.eval()
 
 
     def forward(
@@ -50,7 +52,8 @@ class AnimateFlow3D(nn.Module):
         global_obs,
         first_frame_object_points,
     ):
-        global_condition = self.scene_encoder(global_obs)
+        global_condition = self.scene_encoder.encode_pc(global_obs)
+        global_condition = global_condition / global_condition.norm(dim=-1, keepdim=True)
         local_condition = self.obj_encoder(first_frame_object_points)
         # concat with text feature
         encoder_hidden_states = torch.cat(

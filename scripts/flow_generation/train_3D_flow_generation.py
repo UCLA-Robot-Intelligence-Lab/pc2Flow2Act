@@ -1,51 +1,30 @@
-import copy
-import gc
-import math
 import os
-
-import torch.utils
-import torch.utils.data
 
 os.environ["NCCL_DEBUG"] = "INFO"
 os.environ["NCCL_P2P_DISABLE"] = "1"
-import random
 
+import math
+import pickle
 import hydra
 import numpy as np
 import torch
+import torch.utils
+import torch.utils.data
 import torch.nn.functional as F
 import wandb
 from accelerate import Accelerator
-from diffusers import AutoencoderKL, DDIMScheduler
+from diffusers import DDIMScheduler
 from diffusers.optimization import get_scheduler
-from diffusers.utils.import_utils import is_xformers_available
-from einops import rearrange
 from hydra.core.hydra_config import HydraConfig
 from omegaconf import DictConfig, OmegaConf
-from peft import LoraConfig, get_peft_model
-from transformers import CLIPTextModel, CLIPTokenizer
 from tqdm import tqdm
 
-import pickle
-
-# from im2flow2act.flow_generation.animatediff.models.unet import UNet3DConditionModel
-from diffusers import UNet2DConditionModel  # using the original UNet3DConditionModel
+# models and dataset
+from diffusers import UNet2DConditionModel
+from im2flow2act.diffusion_model.uni3d.models.uni3d import create_uni3d
 from im2flow2act.flow_generation.AnimateFlow3D import AnimateFlow3D
 from im2flow2act.flow_generation.AnimateFlow3DPipeline import AnimationFlow3DPipeline
-from im2flow2act.flow_generation.inference import inference_from_dataset
-
-#     backend="nccl", init_method="env://", timeout=datetime.timedelta(seconds=5400)
-# )
-
-
-def cast_training_params(model, dtype=torch.float32):
-    if not isinstance(model, list):
-        model = [model]
-    for m in model:
-        for param in m.parameters():
-            # only upcast trainable parameters into fp32
-            if param.requires_grad:
-                param.data = param.to(dtype)
+from im2flow2act.flow_generation.dataloader.animateflow_mimicgen_3d_dataset import AnimateFlowMimicgen3DDataset
 
 
 @hydra.main(
@@ -58,49 +37,32 @@ def train(cfg: DictConfig):
         gradient_accumulation_steps=cfg.training.gradient_accumulation_steps
     )
     output_dir = HydraConfig.get().runtime.output_dir  # hydra will automatically assign a working directory
+    ckpt_save_dir = os.path.join(output_dir, "checkpoints")
+    eval_save_dir = os.path.join(output_dir, "evaluations")
     if accelerator.is_local_main_process:
         wandb.init(project=cfg.project_name)
         wandb.config.update(OmegaConf.to_container(cfg))
         accelerator.print("Logging dir", output_dir)
-        ckpt_save_dir = os.path.join(output_dir, "checkpoints")
-        eval_save_dir = os.path.join(output_dir, "evaluations")
-        # state_save_dir = os.path.join(output_dir, "state")
         os.makedirs(ckpt_save_dir, exist_ok=True)
-        # os.makedirs(state_save_dir, exist_ok=True)
+        wandb.define_metric("epoch val loss", step_metric="val epoch")
+
     # Load scheduler, tokenizer and models.
     noise_scheduler = DDIMScheduler(**cfg.noise_scheduler_kwargs)
 
     # Train UNet2DConditionModel from scratch
     unet = UNet2DConditionModel(in_channels=3, out_channels=3)
-    unet.requires_grad_(True)
-
-    # for name, param in unet.named_parameters():
-    #     if "motion_modules." in name:
-    #         param.requires_grad = True
 
     weight_dtype = torch.float32
-    # Move unet, vae and text_encoder to device and cast to weight_dtype
-    unet.to(accelerator.device)
-    if cfg.training.mixed_precision == "fp16":
-        # only upcast trainable parameters (LoRA) into fp32
-        cast_training_params(unet, dtype=torch.float32)
 
-    # Enable xformers
-    if cfg.training.enable_xformers_memory_efficient_attention:
-        if is_xformers_available():
-            unet.enable_xformers_memory_efficient_attention()
-        else:
-            raise ValueError(
-                "xformers is not available. Make sure it is installed correctly"
-            )
-
-    # Enable gradient checkpointing
-    if cfg.training.gradient_checkpointing:
-        unet.enable_gradient_checkpointing()
+    # Load Uni3D model
+    uni3d = create_uni3d(cfg.uni3d)
+    uni3d_ckpt = torch.load(cfg.uni3d.ckpt_path)
+    if "module" in uni3d_ckpt:
+        uni3d_ckpt = uni3d_ckpt["module"]
+    uni3d.load_state_dict(uni3d_ckpt)
 
     # AnimateFlow
-    model = AnimateFlow3D(unet=unet)
-    model.requires_grad_(True)
+    model = AnimateFlow3D(unet=unet, uni3d=uni3d)
 
     optimizer_cls = torch.optim.AdamW
 
@@ -111,9 +73,12 @@ def train(cfg: DictConfig):
         weight_decay=cfg.optimizer.adam_weight_decay,
         eps=cfg.optimizer.adam_epsilon,
     )
-    dataset = hydra.utils.instantiate(cfg.dataset) 
+    dataset = hydra.utils.instantiate(cfg.dataset)
+    if accelerator.is_local_main_process:
+        if isinstance(dataset, AnimateFlowMimicgen3DDataset):
+            dataset.save_normalization_parameters(ckpt_save_dir)
 
-    # do train test split 
+    # do train test split
     dataset_size = len(dataset)
     train_size = int(0.95 * dataset_size)
     val_size = dataset_size - train_size
@@ -223,7 +188,6 @@ def train(cfg: DictConfig):
             # (this is the forward diffusion process)
             noisy_latents = noise_scheduler.add_noise(latents, noise, timesteps)
 
-
             # Get the target for loss depending on the prediction type
             if noise_scheduler.config.prediction_type == "epsilon":
                 target = noise
@@ -272,6 +236,7 @@ def train(cfg: DictConfig):
             accelerator.print(f"Evaluate at epoch {epoch}.")
             if accelerator.is_local_main_process:
                 eval_model = accelerator.unwrap_model(model)
+                eval_model.eval()
                 evaluation_save_path = os.path.join(eval_save_dir, f"epoch_{epoch}")
                 os.makedirs(eval_save_dir, exist_ok=True)
 
@@ -279,6 +244,7 @@ def train(cfg: DictConfig):
                     model=eval_model,
                     device=accelerator.device,
                     scheduler=noise_scheduler,
+                    dataset=dataset
                 )
                 # TODO: use this pipeline to generate some evaluation result and save it
                 with torch.no_grad():
@@ -287,7 +253,7 @@ def train(cfg: DictConfig):
                     global_obs = val["global_obs"].to(weight_dtype)
                     first_frame_object_points = val["first_frame_object_points"].to(weight_dtype)
 
-                    flow = pipeline(global_obs, first_frame_object_points, cfg.animateflow_3d_kwargs.flow_shape)
+                    flow = pipeline(global_obs, first_frame_object_points, cfg.flow_shape)
 
                     results = {
                         "global_obs": global_obs,
@@ -296,9 +262,18 @@ def train(cfg: DictConfig):
                         "generated_flow": flow
                     }
 
+                    # save the resuls for visualization
                     os.makedirs(evaluation_save_path, exist_ok=True)
                     with open(f"{evaluation_save_path}/outputs.pickle" , "wb") as handle:
                         pickle.dump(results, handle, pickle.HIGHEST_PROTOCOL)
+
+                    val_loss = F.mse_loss(flow.cpu(), val["point_tracking_sequence"], reduction="mean")
+                    wandb.log(
+                        {
+                            "epoch val loss": val_loss,
+                            "val epoch": epoch,
+                        }
+                    )
 
                 # it should be fine but set the timestep back to the training timesteps
                 noise_scheduler.set_timesteps(
